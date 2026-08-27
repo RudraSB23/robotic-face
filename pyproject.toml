@@ -1,0 +1,26 @@
+[project]
+name = "robot-main"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "RudraSB23", email = "rudrasb23@gmail.com" }
+]
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "dotenv>=0.9.9",
+    "edge-tts>=7.2.8",
+    "pyaudio>=0.2.14",
+    "pygame-ce>=2.5.8",
+    "pyserial>=3.5",
+    "requests>=2.34.2",
+    "serial>=0.0.97",
+    "speechrecognition>=3.17.0",
+]
+
+[project.scripts]
+robot-main = "robot_main:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"

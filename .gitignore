@@ -1,0 +1,7 @@
+.venv
+.python-version
+robot_speech.mp3
+src
+backup
+.env
+backup.py
