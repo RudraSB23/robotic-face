@@ -49,38 +49,222 @@ three places: the state animation, the manual `MOUTH:` / `EYES:` / `NECK:`
 commands, and the motion stepper itself. Do not widen any of them without
 checking the linkage first.
 
-## Flashing the firmware
+## Setup
 
-1. Open `reception_robot/reception_robot.ino` in the Arduino IDE.
-2. Install the **ESP32Servo** library.
-3. Select your ESP32 board and the port the robot is connected on.
-4. Upload, then **close the serial monitor** — the controller needs that port.
+Do these in order. Steps 1–5 get the software running without the robot;
+steps 6–8 are what you need for it to move and answer.
 
-## Configuration
+### 1. Install uv
 
-Everything lives in `.env`. Only three keys are required.
+uv is the package manager this project uses. It creates the virtualenv and
+installs dependencies in one command.
 
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `WEBHOOK_URL` | – | n8n webhook; must answer with `{"text": "..."}` |
-| `ELEVENLABS_API_KEY` | – | used for both STT and TTS |
-| `ELEVENLABS_VOICE_ID` | – | TTS voice |
-| `ROBOT_SERIAL_PORT` | `COM6` | ESP32 port |
-| `ROBOT_TTS_PROVIDER` | `elevenlabs` | or `edge` for Edge TTS |
-| `ROBOT_TTS_VOICE` | `en-US-AriaNeural` | Edge TTS voice |
-| `ROBOT_STT_LANGUAGE` | `en` | sent to the transcriber |
-| `ROBOT_STT_TIMEOUT_SEC` | `5` | silence before the mic gives up |
-| `ROBOT_STT_PHRASE_LIMIT_SEC` | `10` | longest single utterance |
-| `ROBOT_LINK_PING_SEC` | `5` | keepalive interval |
-| `ROBOT_LINK_TIMEOUT_SEC` | `15` | silence after which the link is "unresponsive" |
-| `ROBOT_FALLBACK_REPLY` | see `config.py` | spoken when the workflow returns nothing |
-| `ROBOT_DEBUG` | off | logs every motion command |
-| `ROBOT_LOG_TIMESTAMPS` | off | prefixes logs with an elapsed timer |
+**Windows (PowerShell)**
 
-## Running
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+or, if you prefer a package manager:
+
+```powershell
+winget install --id=astral-sh.uv -e
+```
+
+**macOS / Linux**
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Verify it worked:
+
+```powershell
+uv --version
+```
+
+### 2. Get the code
+
+```powershell
+git clone https://github.com/RudraSB23/robotic-face.git
+cd robotic-face
+```
+
+### 3. Install dependencies
 
 ```powershell
 uv sync
+```
+
+This creates `.venv` and installs everything from `uv.lock`. Python 3.13 is
+required; uv will fetch it for you if you do not have it.
+
+### 4. Create `.env`
+
+Copy the three required values into a file called `.env` in the project root.
+It is gitignored — never commit it.
+
+```dotenv
+# n8n — step 7 tells you what to paste here
+WEBHOOK_URL=
+
+# ElevenLabs — used for both speech-to-text and text-to-speech
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID=
+```
+
+`ELEVENLABS_VOICE_ID` is the last item in the voice browser on your ElevenLabs
+dashboard. A voice that matches the existing clips is ideal, otherwise the
+robot will change personality when it starts speaking.
+
+Everything else is optional:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ROBOT_SERIAL_PORT` | `COM6` | ESP32 port; run `/ports` to find yours |
+| `ROBOT_TTS_PROVIDER` | `elevenlabs` | or `edge` to use Edge TTS instead |
+| `ROBOT_TTS_VOICE` | `en-US-AriaNeural` | Edge TTS voice |
+| `ROBOT_TTS_MODEL` | `eleven_multilingual_v2` | ElevenLabs TTS model |
+| `ROBOT_STT_MODEL` | `scribe_v2` | ElevenLabs speech-to-text model |
+| `ROBOT_STT_LANGUAGE` | `en` | sent to the transcriber |
+| `ROBOT_STT_TIMEOUT_SEC` | `5` | silence before the mic gives up |
+| `ROBOT_STT_PHRASE_LIMIT_SEC` | `10` | longest single utterance |
+| `ROBOT_HTTP_TIMEOUT_SEC` | `30` | how long to wait for the n8n answer |
+| `ROBOT_BAUD_RATE` | `115200` | serial speed; only change if you reflash at another rate |
+| `ROBOT_BOOT_DELAY_SEC` | `2.0` | wait after opening the port, while the ESP32 boots |
+| `ROBOT_LINK_PING_SEC` | `5` | keepalive interval |
+| `ROBOT_LINK_TIMEOUT_SEC` | `15` | silence after which the link is "unresponsive" |
+| `ROBOT_FALLBACK_REPLY` | see `config.py` | spoken when the workflow returns nothing |
+| `ROBOT_DEBUG` | off | set to `1` to log every motion command |
+| `ROBOT_LOG_TIMESTAMPS` | off | set to `1` to prefix logs with a timer |
+
+### 5. First run without hardware
+
+```powershell
+uv run python main.py
+```
+
+With no ESP32 connected it starts in test mode and logs every motion command
+instead of sending it. Check that the console comes up:
+
+```
+robot> /status
+[status] link=TEST MODE | face=IDLE | tts=elevenlabs | stt=scribe_v2 | mic=ready | sound=on | interaction=IDLE | wake=6 | ack=6
+```
+
+Then run the tests:
+
+```powershell
+uv run python -m unittest discover -s tests
+```
+
+You can stop here until you have the robot assembled.
+
+### 6. Wire up and flash the ESP32
+
+**Servo and sensor pins**
+
+See the table in *Hardware* above. Briefly: mouth 12, eye vertical 27, eye
+horizontal 14, neck 25, touch 33.
+
+All servo grounds must be tied together and to the ESP32 ground. Power the
+servos from a **separate 5 V supply** — four servos on the board's 3V3 rail will
+brown out and reboot the ESP32 mid-movement.
+
+**Flashing**
+
+1. Install the [Arduino IDE](https://www.arduino.cc/en/software).
+2. In *Tools → Boards*, install **esp32 by Espressif Systems** (this is a large
+   package; expect a few minutes).
+3. *Tools → Manage Libraries*, search for **ESP32Servo** by Kevin Harrington and
+   install it.
+4. Open `reception_robot/reception_robot.ino`.
+5. Select your board in *Tools → Board*, and the port in *Tools → Port*.
+6. Upload. The board prints `Robot Ready!` once it boots.
+7. **Close the serial monitor.** The controller needs that port, and the two
+   cannot share it.
+
+### 7. Set up the n8n workflow
+
+The repository ships the workflow as `Talking Robot - HAPS RAG.json`. It is a RAG
+agent for Him Academy Public School:
+
+```
+Webhook → AI Agent (knowledge base + memory) → Set field → Respond to Webhook
+```
+
+**a. Import it.** In n8n, *Workflows → Import from File*, and select
+`Talking Robot - HAPS RAG.json`. If you are on n8n Cloud, you can also paste the
+file contents into a new workflow.
+
+**b. Add credentials.** The agent needs two, both named `main` in the export:
+
+| Credential | Used by | Notes |
+| --- | --- | --- |
+| **OpenAI** | `Embeddings OpenAI1` | required — this creates the vector embeddings |
+| **OpenRouter** | `OpenRouter Chat Model1` | required — this is the model that answers |
+
+Because the file was exported as a template, n8n will prompt for these on
+import. Create them under *Credentials → New credential*.
+
+> The agent node also has a second chat model (`OpenAI Chat Model`) wired into the
+> same input. Only one model can be active on that port and which one n8n picks
+> is undefined. Open the agent, disconnect the model you do not want, and save.
+
+**c. Activate it.** Toggle the workflow to *Active*. n8n only serves production
+webhook URLs for active workflows.
+
+**d. Copy the webhook URL.** Open the **Webhook1** node and copy its
+**Production URL**. It looks like:
+
+```
+https://your-n8n-host/webhook/76d40ee1-0d27-47fe-88f2-acd7bf3fca01
+```
+
+Paste that into `WEBHOOK_URL` in your `.env`. The long UUID at the end *is* the
+credential — anyone holding it can query your knowledge base.
+
+**e. Load the knowledge base.** This step is easy to miss, and the robot will
+appear to work while answering nothing useful if you skip it.
+
+The workflow stores documents in n8n's **in-memory** vector store under the key
+`school-robot`, and that store starts empty on a fresh import. To fill it:
+
+1. Open the **Upload your file here1** node and copy its **Production URL**.
+2. Open that URL in a browser — it is a form titled "Upload your data to test RAG".
+3. Upload your school documents (`.pdf` or `.csv`) and submit.
+4. Watch the n8n executions panel: you should see the upload flow run through the
+   data loader and into the vector store.
+
+Only after this will the agent be able to answer school-specific questions.
+
+> Because the store is in memory, **restarting n8n empties it** and you must
+> re-upload. See *Known gaps*.
+
+**f. Sanity-check it.** With the workflow active, in a new terminal:
+
+```powershell
+curl.exe -X POST "https://your-n8n-host/webhook/76d40ee1-..." `
+  -H "Content-Type: application/json" `
+  -d "{\"text\":\"Where is the library?\",\"sessionId\":\"test-1\"}"
+```
+
+You should get `{"text":"..."}` back. If you get an error instead, check that the
+workflow is active and that the credentials are saved.
+
+### 8. Re-record the greeting clips (optional)
+
+The repository already contains six wake clips and six acknowledgement clips. You
+only need this if you change the ElevenLabs voice:
+
+```powershell
+uv run python generate_audio.py          # both sets
+uv run python generate_audio.py wake     # wake clips only
+```
+
+### 9. Run it
+
+```powershell
 uv run python main.py
 ```
 
@@ -89,6 +273,22 @@ Or with an already-provisioned virtualenv:
 ```powershell
 .venv\Scripts\python.exe main.py
 ```
+
+When the ESP32 is connected you should see the link come up and the face animate.
+`/status` is the fastest way to confirm.
+
+### 10. Verify
+
+| Check | How |
+| --- | --- |
+| Microphone and speakers work | `/listen`, then say something |
+| n8n round trip | type a question at the console instead of a slash command |
+| ESP32 link | `/status` should say `link=LIVE`, not `TEST MODE` |
+| Face animation | `/face THINKING`, then `/face IDLE` |
+
+## Running
+
+Start it with `uv run python main.py` (see *Setup* step 9).
 
 **Without an ESP32** the controller starts in test mode: it logs every motion
 command instead of sending it, `/status` shows `link=TEST MODE`, and everything
@@ -132,9 +332,8 @@ start of every touch interaction, so each visitor gets a fresh conversation and
 the next one does not inherit the previous visitor's context. Follow-up
 questions inside the same interaction keep the same session.
 
-The workflow export (`Talking Robot - HAPS RAG.json`) is **gitignored on
-purpose** — it embeds the live webhook path, which is a credential. Keep it out
-of version control, alongside `.env`.
+The workflow export lives in the repository as `Talking Robot - HAPS RAG.json`;
+*Setup* step 7 walks through importing and configuring it.
 
 ## Tests
 
@@ -278,6 +477,7 @@ reception_robot/
 wake_responses/             "How can I help you?" clips
 reasoning_responses/        "let me check that" clips
 tests/                      unittest suite
+Talking Robot - HAPS RAG.json   n8n workflow (see Setup step 7)
 ```
 
 To re-record the clips in the current voice:
@@ -310,22 +510,6 @@ Being explicit about what is unfinished:
   that; raise `ROBOT_HTTP_TIMEOUT_SEC` if you see the fallback line fire on slow
   questions.
 - No CI, and the tests do not cover the firmware.
-
-### Security note
-
-The previous version (`9067c0b`) hardcoded a live n8n webhook URL directly in
-`main.py`. That URL is therefore public in this repository's git history, and
-anyone can send requests to it. The current version reads the webhook from
-`.env` and redacts it in the startup banner, but history cannot be cleaned
-without destroying the known-good fallback commit.
-
-**Rotate that webhook in n8n.** It should be treated as compromised.
-
-The same applies to the workflow JSON export: it embeds the live webhook path, so
-it is gitignored. Anyone holding that URL can drive the robot's brain and read
-out whatever the school has indexed. If the n8n instance is internet-facing,
-add authentication to the webhook node or put it behind a proxy that requires a
-header the controller sends.
 
 ## Hardware cautions
 
