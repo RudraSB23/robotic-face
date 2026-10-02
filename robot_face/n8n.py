@@ -25,6 +25,11 @@ class Brain:
     def __init__(self, session_id: str | None = None) -> None:
         self.session_id = session_id or new_session_id()
 
+    def rotate(self) -> str:
+        self.session_id = new_session_id()
+        log.debug(f"[n8n] new conversation: {self.session_id}")
+        return self.session_id
+
     def ask(self, text: str) -> str | None:
         if not config.WEBHOOK_URL:
             log.error("[n8n] WEBHOOK_URL is not set.")

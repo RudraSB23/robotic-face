@@ -5,6 +5,8 @@ src
 .env
 backup.py
 backup/
+*.workflow.json
+Talking Robot*.json
 __pycache__/
 *.py[cod]
 .pytest_cache/

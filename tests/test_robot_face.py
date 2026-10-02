@@ -110,6 +110,12 @@ class FakeBrain:
         self.on_ask = on_ask
         self.session_id = "robot-test"
         self.asked: list[str] = []
+        self.sessions: list[str] = []
+
+    def rotate(self) -> str:
+        self.session_id = f"robot-{len(self.sessions) + 1}"
+        self.sessions.append(self.session_id)
+        return self.session_id
 
     def ask(self, text: str) -> str | None:
         self.asked.append(text)
@@ -368,6 +374,29 @@ class InteractionFlowTests(unittest.TestCase):
         worker.join(timeout=5)
 
         self.assertGreaterEqual(link.commands.count("FLAP:2000"), 2)
+
+    def test_each_visitor_gets_a_fresh_memory_session(self) -> None:
+        app, _link, _audio, _speaker = make_app(["hello"])
+        app.touch_interaction()
+        app.touch_interaction()
+        self.assertEqual(len(app.brain.sessions), 2)
+        self.assertNotEqual(app.brain.sessions[0], app.brain.sessions[1])
+
+    def test_one_visitor_keeps_their_session_across_a_follow_up(self) -> None:
+        app, _link, _audio, _speaker = make_app(
+            ["first question", "second question"]
+        )
+        original_speak = app.speak
+
+        def speak_then_interrupt(text: str) -> bool:
+            result = original_speak(text)
+            app.interrupt.set()
+            return result
+
+        app.speak = speak_then_interrupt
+        app.touch_interaction()
+
+        self.assertEqual(len(app.brain.sessions), 1)
 
     def test_state_is_released_after_an_interaction(self) -> None:
         app, _link, _audio, _speaker = make_app(["hello"])

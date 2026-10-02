@@ -147,6 +147,7 @@ class RobotApp:
 
         self.interaction_active.set()
         self.interrupt.clear()
+        self.brain.rotate()
 
         try:
             log.log("[touch] visitor detected")

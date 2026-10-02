@@ -111,6 +111,31 @@ easiest way to work on the conversation without the robot in front of you.
 Anything that is not a slash command is sent straight to n8n and answered out
 loud, which is a quick way to test the voice path without the robot.
 
+## The n8n workflow
+
+The controller talks to an n8n webhook. The bundled workflow is a RAG agent:
+`Webhook → AI Agent (RAG + memory) → Set field → Respond to Webhook`.
+
+The contract the controller depends on:
+
+| Direction | Shape |
+| --- | --- |
+| robot → n8n | `{"source": "robot", "type": "query", "text": "...", "sessionId": "robot-..."}` |
+| n8n → robot | `{"text": "..."}` |
+
+The workflow reads only `body.text` (the question) and `body.sessionId` (the
+conversation memory key). `source` and `type` are sent for readability and
+ignored by the workflow.
+
+**`sessionId` is per visitor, not per process.** The controller rotates it at the
+start of every touch interaction, so each visitor gets a fresh conversation and
+the next one does not inherit the previous visitor's context. Follow-up
+questions inside the same interaction keep the same session.
+
+The workflow export (`Talking Robot - HAPS RAG.json`) is **gitignored on
+purpose** — it embeds the live webhook path, which is a credential. Keep it out
+of version control, alongside `.env`.
+
 ## Tests
 
 ```powershell
@@ -273,6 +298,17 @@ Being explicit about what is unfinished:
 - The `keyterms` list for STT is sent as repeated multipart fields. The ElevenLabs
   docs describe `keyterms` as a list of strings; that this encoding is parsed as
   a list rather than only the last value being read is assumed, not verified.
+- The workflow's vector store is n8n's **in-memory** store (`school-robot`). It
+  is not persisted, so restarting n8n empties the knowledge base and the school
+  documents have to be re-uploaded through the workflow's upload form before the
+  robot can answer anything school-specific. Move it to a persistent store (Qdrant
+  or pgvector) if this is going anywhere near a real deployment.
+- The AI Agent node has **two** chat models wired into its single language-model
+  input (OpenRouter on port 0, OpenAI on port 1). Only one will actually be used
+  and which is undefined — disconnect the one you do not want.
+- The controller allows 30 s for a webhook call. A cold RAG agent can exceed
+  that; raise `ROBOT_HTTP_TIMEOUT_SEC` if you see the fallback line fire on slow
+  questions.
 - No CI, and the tests do not cover the firmware.
 
 ### Security note
@@ -284,6 +320,12 @@ anyone can send requests to it. The current version reads the webhook from
 without destroying the known-good fallback commit.
 
 **Rotate that webhook in n8n.** It should be treated as compromised.
+
+The same applies to the workflow JSON export: it embeds the live webhook path, so
+it is gitignored. Anyone holding that URL can drive the robot's brain and read
+out whatever the school has indexed. If the n8n instance is internet-facing,
+add authentication to the webhook node or put it behind a proxy that requires a
+header the controller sends.
 
 ## Hardware cautions
 
