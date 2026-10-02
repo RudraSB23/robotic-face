@@ -1,7 +1,7 @@
 [project]
 name = "robot-main"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Reception robot controller: ESP32 face animation, voice pipeline, n8n brain"
 readme = "README.md"
 authors = [
     { name = "RudraSB23", email = "rudrasb23@gmail.com" }
@@ -18,9 +18,5 @@ dependencies = [
     "speechrecognition>=3.17.0",
 ]
 
-[project.scripts]
-robot-main = "robot_main:main"
-
-[build-system]
-requires = ["uv_build>=0.12.3,<0.13.0"]
-build-backend = "uv_build"
+[tool.uv]
+package = false

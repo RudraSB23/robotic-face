@@ -2,6 +2,9 @@
 .python-version
 robot_speech.mp3
 src
-backup
 .env
 backup.py
+backup/
+__pycache__/
+*.py[cod]
+.pytest_cache/
